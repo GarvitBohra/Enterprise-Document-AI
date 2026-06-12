@@ -1,0 +1,9 @@
+fastapi
+uvicorn[standard]
+streamlit
+openai
+supabase
+llama-index
+python-dotenv
+requests
+httpx

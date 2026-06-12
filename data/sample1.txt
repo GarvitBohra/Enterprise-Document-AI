@@ -1,0 +1,3 @@
+Product X Overview
+
+Product X is a lightweight task manager designed for small teams. It supports projects, tasks, and simple tagging. The main features are quick task creation, due dates, and email notifications.
