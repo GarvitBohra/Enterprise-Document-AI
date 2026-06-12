@@ -33,10 +33,23 @@ Files created
 - `backend/main.py` — FastAPI app with `/chat` endpoint
 - `backend/openai_client.py` — OpenAI helper
 - `backend/supabase_client.py` — Supabase client wrapper
-- `connectors/slack_connector.py` — Slack connector skeleton
+- `connectors/gmail_connector.py` — Gmail connector skeleton
 - `connectors/gdrive_connector.py` — Google Drive connector skeleton
+- `scripts/download_gdrive_pdfs.py` — helper script to download PDFs from Drive
 - `frontend/streamlit_app.py` — Minimal Streamlit chat UI
 - `.env.example`, `requirements.txt`, `.gitignore`
+
+Download PDFs from Google Drive:
+1. Set `GOOGLE_APPLICATION_CREDENTIALS` to your service account JSON.
+2. Run:
+
+```bash
+python scripts/download_gdrive_pdfs.py --folder-id YOUR_FOLDER_ID
+```
+
+Downloaded PDFs will be saved to `data/gdrive/` by default.
+
+Gmail messages can be exported to text files via `connectors/gmail_connector.py` and ingested with `python backend/ingest.py --dir ./data`.
 
 Next steps
 - Wire backend retrieval flow using Supabase document embeddings.
