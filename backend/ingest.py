@@ -84,7 +84,11 @@ def get_supabase_client():
         return None
     if not SUPABASE_URL or not SUPABASE_KEY:
         return None
-    return create_client(SUPABASE_URL, SUPABASE_KEY)
+    try:
+        return create_client(SUPABASE_URL, SUPABASE_KEY)
+    except Exception as exc:
+        print(f"Supabase client init failed: {exc}")
+        return None
 
 
 def upsert_documents(supabase, rows: List[dict]):

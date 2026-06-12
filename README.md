@@ -6,7 +6,7 @@ Quick start
 
 1. Copy `.env.example` to `.env` and fill keys.
    - `SUPABASE_URL`
-   - `SUPABASE_KEY`
+   - `SUPABASE_KEY` (use your Supabase anon or service-role key, not a publishable key)
    - `OPENAI_API_KEY`
 2. Install dependencies:
 

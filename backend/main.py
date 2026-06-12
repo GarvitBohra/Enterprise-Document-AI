@@ -1,3 +1,5 @@
+from typing import Dict, List
+
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from backend.openai_client import chat_completion, embed_text
@@ -15,7 +17,7 @@ def health():
     return {"status": "ok"}
 
 
-def cosine_similarity(a: list[float], b: list[float]) -> float:
+def cosine_similarity(a: List[float], b: List[float]) -> float:
     if not a or not b or len(a) != len(b):
         return 0.0
     dot = sum(x * y for x, y in zip(a, b))
@@ -24,7 +26,7 @@ def cosine_similarity(a: list[float], b: list[float]) -> float:
     return dot / (mag_a * mag_b + 1e-12)
 
 
-def build_prompt(query: str, documents: list[dict]) -> str:
+def build_prompt(query: str, documents: List[Dict]) -> str:
     context = []
     for idx, doc in enumerate(documents, start=1):
         source = doc.get("metadata", {}).get("source", f"doc-{idx}")
@@ -39,7 +41,7 @@ def build_prompt(query: str, documents: list[dict]) -> str:
     )
 
 
-async def retrieve_documents(question: str, top_k: int = 5) -> list[dict]:
+async def retrieve_documents(question: str, top_k: int = 5) -> List[Dict]:
     supabase = get_supabase()
     if supabase is None:
         raise HTTPException(status_code=500, detail="Supabase is not configured")

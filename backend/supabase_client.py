@@ -11,10 +11,20 @@ except Exception:
 SUPABASE_URL = os.getenv("SUPABASE_URL", "")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY", "")
 
-if create_client and SUPABASE_URL and SUPABASE_KEY:
-    supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
-else:
-    supabase = None
+supabase = None
+
 
 def get_supabase():
+    global supabase
+    if supabase is not None:
+        return supabase
+
+    if not create_client or not SUPABASE_URL or not SUPABASE_KEY:
+        return None
+
+    try:
+        supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
+    except Exception as exc:
+        print(f"Supabase client init failed: {exc}")
+        supabase = None
     return supabase
