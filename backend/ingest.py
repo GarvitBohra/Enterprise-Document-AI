@@ -6,7 +6,6 @@ Usage:
 This is a lightweight scaffold — replace with LlamaIndex flows later.
 """
 import os
-import json
 import uuid
 import argparse
 from typing import List
@@ -63,13 +62,19 @@ def read_files(directory: str) -> List[dict]:
 
 
 def chunk_text(text: str, chunk_size: int = 1000, overlap: int = 200):
+    if chunk_size <= 0:
+        raise ValueError("chunk_size must be positive")
+    if overlap < 0:
+        raise ValueError("overlap must be zero or positive")
+    step = max(1, chunk_size - overlap)
     words = text.split()
     chunks = []
     i = 0
     while i < len(words):
         chunk = " ".join(words[i : i + chunk_size])
-        chunks.append(chunk)
-        i += chunk_size - overlap
+        if chunk.strip():
+            chunks.append(chunk)
+        i += step
     return chunks
 
 
@@ -104,6 +109,8 @@ def ingest_directory(directory: str):
     all_rows = []
     for d in docs:
         chunks = chunk_text(d["text"])
+        if not chunks:
+            continue
         embeddings = embed_texts(chunks)
         for i, (chunk, emb) in enumerate(zip(chunks, embeddings)):
             doc_id = str(uuid.uuid4())

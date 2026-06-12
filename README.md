@@ -18,13 +18,20 @@ python -m pip install -r requirements.txt
 
 ```bash
 # from project root
-python3 -m uvicorn backend.main:app --reload --port 8000
+python3 scripts/run_backend.py
 ```
 
 4. Run frontend:
 
 ```bash
-python3 -m streamlit run frontend/streamlit_app.py --server.port 8501
+python3 scripts/run_frontend.py
+```
+
+Or run either service with `make`:
+
+```bash
+make backend
+make frontend
 ```
 
 The backend `/chat` endpoint now retrieves top document chunks from Supabase and uses OpenAI to answer from those excerpts.

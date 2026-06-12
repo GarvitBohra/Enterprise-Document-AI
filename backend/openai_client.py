@@ -13,8 +13,7 @@ async def embed_text(text: str) -> List[float]:
         return resp.data[0].embedding
 
     import asyncio
-    loop = asyncio.get_event_loop()
-    return await loop.run_in_executor(None, _call)
+    return await asyncio.to_thread(_call)
 
 async def chat_completion(messages: List[Dict]) -> str:
     """Call OpenAI chat completion in a thread to avoid blocking event loop."""
@@ -27,5 +26,4 @@ async def chat_completion(messages: List[Dict]) -> str:
         return resp.choices[0].message.content
 
     import asyncio
-    loop = asyncio.get_event_loop()
-    return await loop.run_in_executor(None, _call)
+    return await asyncio.to_thread(_call)

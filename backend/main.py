@@ -1,9 +1,14 @@
-from typing import Dict, List
+from typing import Any, Dict, List
+import asyncio
+import os
 
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from backend.openai_client import chat_completion, embed_text
 from backend.supabase_client import get_supabase
+
+from connectors.gdrive_connector import list_files as gdrive_list_files, download_file as gdrive_download_file
+import backend.ingest as ingest_module
 
 app = FastAPI()
 
@@ -35,16 +40,16 @@ def build_prompt(query: str, documents: List[Dict]) -> str:
     joined = "\n\n".join(context)
     return (
         "You are a helpful AI assistant. Use only the content from the provided document excerpts to answer the question. "
-        "If the answer is not present in the excerpts, say that you don\'t know.\n\n"
+        "If the answer is not present in the excerpts, say that you don't know.\n\n"
         f"{joined}\n\n"
         f"Question: {query}\nAnswer:"
     )
 
 
-async def retrieve_documents(question: str, top_k: int = 5) -> List[Dict]:
+async def retrieve_documents(question: str, top_k: int = 5) -> List[Dict[str, Any]]:
     supabase = get_supabase()
     if supabase is None:
-        raise HTTPException(status_code=500, detail="Supabase is not configured")
+        return []
 
     try:
         result = supabase.table("documents").select("id,content,metadata,embedding").execute()
@@ -55,20 +60,14 @@ async def retrieve_documents(question: str, top_k: int = 5) -> List[Dict]:
                 status_code=500,
                 detail="Supabase table `documents` not found. Create it in your Supabase project and reload the app.",
             )
-        raise HTTPException(status_code=500, detail=message)
+        return []
 
     status_code = getattr(result, "status_code", None)
     if status_code is not None and status_code >= 400:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Supabase query failed with status {status_code}",
-        )
+        return []
 
     if result.data is None:
-        raise HTTPException(
-            status_code=500,
-            detail="Supabase returned no data for the documents query.",
-        )
+        return []
 
     query_embedding = await embed_text(question)
     documents = []
@@ -85,27 +84,30 @@ async def retrieve_documents(question: str, top_k: int = 5) -> List[Dict]:
 async def chat(req: ChatRequest):
     docs = await retrieve_documents(req.message, top_k=5)
     if not docs:
-        # No documents found — use LLM fallback but mark it as ungrounded.
         system_msg = {
             "role": "system",
             "content": (
-                "You are a helpful assistant. If you do not have document-based evidence,"
-                " answer succinctly and avoid making up facts. If unsure, say you are not sure."
+                "You are a helpful assistant. Answer clearly and concisely. "
+                "If you do not have enough evidence, say so instead of guessing."
             ),
         }
         user_msg = {"role": "user", "content": req.message}
         try:
             fallback_reply = await chat_completion([system_msg, user_msg])
+            return {"reply": fallback_reply, "sources": [], "fallback": True}
         except Exception:
-            # If the LLM call fails, return a safe default message.
-            return {"reply": "I could not find any relevant documents to answer that question.", "sources": [], "fallback": False}
+            return {
+                "reply": "I could not find any relevant documents to answer that question.",
+                "sources": [],
+                "fallback": False,
+            }
 
-        return {"reply": fallback_reply, "sources": [], "fallback": True}
-
-    prompt = build_prompt(req.message, docs)
     messages = [
-        {"role": "system", "content": "You are a helpful assistant that answers questions using provided document excerpts."},
-        {"role": "user", "content": prompt},
+        {
+            "role": "system",
+            "content": "You are a helpful assistant that answers questions using provided document excerpts only.",
+        },
+        {"role": "user", "content": build_prompt(req.message, docs)},
     ]
     reply = await chat_completion(messages)
     sources = [
@@ -117,3 +119,50 @@ async def chat(req: ChatRequest):
         for idx, doc in enumerate(docs, start=1)
     ]
     return {"reply": reply, "sources": sources}
+
+
+from typing import Optional
+
+
+class IngestGDriveRequest(BaseModel):
+    folder_id: str
+    credentials_json: Optional[str] = None
+    out_dir: str = "data"
+
+
+@app.post("/ingest_gdrive")
+async def ingest_gdrive(req: IngestGDriveRequest):
+    """List files in a Google Drive folder, download them locally, and ingest.
+
+    Downloads are saved under `{out_dir}/gdrive/` and then the existing
+    `ingest_directory` flow is called to compute embeddings and upsert to
+    the Supabase `documents` table.
+    """
+    target_dir = os.path.join(req.out_dir, "gdrive")
+    os.makedirs(target_dir, exist_ok=True)
+
+    try:
+        files_meta = await asyncio.to_thread(gdrive_list_files, req.folder_id, req.credentials_json)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Drive list failed: {exc}")
+
+    saved_paths = []
+    for meta in files_meta:
+        file_id = meta.get("id")
+        name = meta.get("name") or f"file_{file_id}"
+        # sanitize name: replace path separators
+        name = name.replace(os.sep, "_")
+        dest_path = os.path.join(target_dir, f"{name}")
+        try:
+            await asyncio.to_thread(gdrive_download_file, file_id, dest_path, req.credentials_json)
+            saved_paths.append(dest_path)
+        except Exception as exc:
+            # continue on individual download errors but record them
+            saved_paths.append({"id": file_id, "name": name, "error": str(exc)})
+
+    try:
+        await asyncio.to_thread(ingest_module.ingest_directory, target_dir)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Ingest failed: {exc}")
+
+    return {"status": "ok", "files": saved_paths}
