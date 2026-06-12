@@ -1,71 +1,60 @@
-# AI MVP Scaffold
+## Enterprise Document AI — Clean dev scaffold
 
-Minimal FastAPI + Streamlit MVP scaffold integrating Supabase, OpenAI, and LlamaIndex.
+Lightweight FastAPI + Streamlit app for document-grounded question answering. This repo provides:
 
-Quick start
+- FastAPI backend with a `/chat` endpoint that answers using document excerpts stored in Supabase.
+- Streamlit frontend for a simple chat UI and an "Ingest Google Drive" action to import files from Drive.
+- Ingestion flow that chunks documents, creates OpenAI embeddings, and upserts vectors into Supabase.
 
-1. Copy `.env.example` to `.env` and fill keys.
-   - `SUPABASE_URL`
-   - `SUPABASE_KEY` (use your Supabase anon or service-role key, not a publishable key)
-   - `OPENAI_API_KEY`
-2. Install dependencies:
+Prerequisites
+- Python 3.8+ (3.9 recommended)
+- A Supabase project with a `documents` table (see schema below)
+- An OpenAI API key and a service account JSON for Google Drive access
 
+Environment
+1. Copy `.env.example` to `.env` and set values:
+	 - `SUPABASE_URL`
+	 - `SUPABASE_KEY` (service role recommended for ingestion)
+	 - `OPENAI_API_KEY`
+	 - Optionally: set `GOOGLE_APPLICATION_CREDENTIALS` to a service account JSON path
+
+Install
 ```bash
-python -m pip install -r requirements.txt
+python3 -m pip install -r requirements.txt
 ```
 
-3. Run backend:
-
+Run (local development)
 ```bash
-# from project root
+# Start backend (FastAPI)
 python3 scripts/run_backend.py
-```
 
-4. Run frontend:
-
-```bash
+# Start frontend (Streamlit)
 python3 scripts/run_frontend.py
 ```
 
-Or run either service with `make`:
+Usage
+- Streamlit UI: open http://localhost:8501. The sidebar contains settings and an "Ingest Google Drive" tool where you can paste a Drive folder ID and either upload a service-account JSON or provide a path to your credentials.
+- API: ingest programmatically with:
 
 ```bash
-make backend
-make frontend
+curl -X POST http://127.0.0.1:8000/ingest_gdrive \
+	-H "Content-Type: application/json" \
+	-d '{"folder_id":"<FOLDER_ID>", "credentials_json":"<JSON_STRING or null>", "out_dir":"data"}'
 ```
 
-The backend `/chat` endpoint now retrieves top document chunks from Supabase and uses OpenAI to answer from those excerpts.
+Endpoints
+- `GET /health` — simple health check
+- `POST /chat` — query the index (JSON body `{ "message": "your question" }`)
+- `POST /ingest_gdrive` — list & download files from a Drive folder, then ingest them into Supabase
 
-Files created
-- `backend/main.py` — FastAPI app with `/chat` endpoint
-- `backend/openai_client.py` — OpenAI helper
-- `backend/supabase_client.py` — Supabase client wrapper
-- `connectors/gmail_connector.py` — Gmail connector skeleton
-- `connectors/gdrive_connector.py` — Google Drive connector skeleton
-- `scripts/download_gdrive_pdfs.py` — helper script to download PDFs from Drive
-- `frontend/streamlit_app.py` — Minimal Streamlit chat UI
-- `.env.example`, `requirements.txt`, `.gitignore`
+Data and ingestion
+- Files downloaded from Drive are saved to `{out_dir}/gdrive/` and then passed through the ingestion flow in `backend/ingest.py` which:
+	1. Reads files and chunks text
+	2. Computes embeddings via OpenAI
+	3. Upserts documents to Supabase `documents` table
 
-Download PDFs from Google Drive:
-1. Set `GOOGLE_APPLICATION_CREDENTIALS` to your service account JSON.
-2. Run:
-
-```bash
-python scripts/download_gdrive_pdfs.py --folder-id YOUR_FOLDER_ID
-```
-
-Downloaded PDFs will be saved to `data/gdrive/` by default.
-
-Gmail messages can be exported to text files via `connectors/gmail_connector.py` and ingested with `python backend/ingest.py --dir ./data`.
-
-Next steps
-- Wire backend retrieval flow using Supabase document embeddings.
-- Add authentication for the backend.
-
-Supabase table suggestion
-
-Run this SQL in your Supabase SQL editor to create a simple `documents` table used by the ingestion script:
-
+Supabase schema suggestions
+Create a simple JSON-embedding table:
 ```sql
 create table if not exists documents (
 	id text primary key,
@@ -75,8 +64,7 @@ create table if not exists documents (
 );
 ```
 
-If you prefer to use `pgvector` natively (recommended for vector search), create a `vector` column instead:
-
+Or use `pgvector` for native vector support:
 ```sql
 create extension if not exists vector;
 create table if not exists documents (
@@ -87,4 +75,22 @@ create table if not exists documents (
 );
 ```
 
-Note: `text-embedding-3-small` produces 1536-dimension embeddings.
+Notes & recommendations
+- Use a service account with Drive access; share folders with the service account email.
+- For production, protect ingestion and chat endpoints with authentication.
+- Keep your `.env` and service-account JSON out of source control (see `.gitignore`).
+
+Project structure (important files)
+- `backend/` — FastAPI app and ingestion logic
+- `frontend/` — Streamlit UI
+- `connectors/` — Drive connector and other utilities
+- `scripts/` — helper run scripts
+- `requirements.txt`, `.env.example`, `README.md`
+
+If you want, I can:
+- Create a stable release branch and open a PR with these cleanup changes.
+- Add a `Makefile` target to run full local setup and linting.
+- Add a progress UI to Streamlit showing per-file ingest status.
+
+---
+Updated to focus on Google Drive ingest and a streamlined developer experience.
